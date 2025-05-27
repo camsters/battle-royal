@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Battle Royale (Viewer Edition - By Pete_Ski_banter_Brigade  )</title>
+  <title>The Queen Of Dragonstones Battle Royale</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -104,6 +104,17 @@
     #leaderboard ol {
       padding-left: 1.5rem;
     }
+#footerNote {
+  position: fixed;
+  bottom: 10px;
+  right: 20px;
+  color: white;
+  font-size: 1.5rem; /* equivalent to h2 size */
+  margin: 0;
+  z-index: 1000;
+  text-shadow: 1px 1px 2px black; /* optional: adds contrast */
+}
+
   </style>
 </head>
 <body>
@@ -116,7 +127,7 @@
 
   <div class="container">
     <main>
-      <h1>Battle Royale (Viewer Edition - By Pete_Ski_banter_Brigade)</h1>
+      <h1>The Queen Of Dragonstones Battle Royale</h1>
       <div id="classSelection">
         <h3>Select Classes</h3>
         <form id="classForm">
@@ -365,5 +376,7 @@
       document.getElementById("resetButton").addEventListener("click", resetGame);
     });
   </script>
+<h2 id="footerNote">Viewer Edition - by Pete_Ski_Banter_Brigade</h2>
+
 </body>
 </html>
