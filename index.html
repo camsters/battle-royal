@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Battle Royale (Viewer Edition)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #231308;
+      color: white;
+      margin: 0;
+    }
+    .container {
+      display: flex;
+      flex-direction: row;
+      gap: 2rem;
+      max-width: 1600px;
+      width: 100%;
+      padding: 2rem;
+    }
+    main {
+      flex: 2;
+    }
+    aside {
+      flex: 1;
+      background: #181818;
+      border: 1px solid #555;
+      padding: 1rem;
+      border-radius: 10px;
+      overflow-y: auto;
+      height: 80vh;
+    }
+    #battleLog {
+      margin: 2rem 0;
+      background: #1a1a1a;
+      padding: 1rem;
+      border-radius: 10px;
+      height: 400px;
+      overflow-y: auto;
+      border: 1px solid #444;
+      box-shadow: 0 0 10px #00ff88;
+    }
+    .glow-drop {
+      border: 1px solid gold;
+      padding: 0.5rem;
+      margin: 0.5rem 0;
+      background: rgba(255, 215, 0, 0.1);
+    }
+    #classSelection {
+      margin-top: 1rem;
+    }
+    #classChoices label {
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+    .health-bar {
+      background: red;
+      height: 10px;
+      margin-top: 3px;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .health-fill {
+      background: limegreen;
+      height: 100%;
+      width: 100%;
+      transition: width 0.5s ease;
+    }
+    #resetButton {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      background: #444;
+      color: white;
+      border: 1px solid #999;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #finalWinner {
+      margin: 2rem auto;
+      padding: 1rem;
+      max-width: 600px;
+      text-align: center;
+      background: gold;
+      color: black;
+      font-size: 1.5rem;
+      font-weight: bold;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #ffd700;
+    }
+    #leaderboard {
+      max-width: 400px;
+      margin: 1rem auto;
+      background: #111;
+      padding: 1rem;
+      border-radius: 10px;
+      border: 1px solid #555;
+      color: white;
+    }
+    #leaderboard h3 {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    #leaderboard ol {
+      padding-left: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <audio id="battleMusic" loop>
+    <source src="battle-music.mp3" type="audio/mpeg">
+  </audio>
+  <audio id="victorySound">
+    <source src="victory-sound.mp3" type="audio/mpeg">
+  </audio>
+
+  <div class="container">
+    <main>
+      <h1>Battle Royale (Viewer Edition)</h1>
+      <div id="classSelection">
+        <h3>Select Classes</h3>
+        <form id="classForm">
+          <div id="classChoices"></div>
+          <button type="submit">Lock In Selections & Start Battle</button>
+        </form>
+      </div>
+      <div id="battleLog"></div>
+      <div id="winner"></div>
+      <button id="resetButton">🔄 Reset Game</button>
+      <div id="leaderboard">
+        <h3>🏅 Leaderboard</h3>
+        <ol id="leaderboardList"></ol>
+      </div>
+    </main>
+    <aside>
+      <h2>Health Tracker</h2>
+      <div id="healthStatus"></div>
+    </aside>
+  </div>
+  <div id="finalWinner" style="display:none;"></div>
+
+  <script>
+    const roles = { Knight: "🛡️", Rogue: "🗡️", Berserker: "🔨", Mage: "🔮", Archer: "🏹" };
+    let viewers = [], assignments = {}, health = {}, chatClient = null;
+    let leaderboard = JSON.parse(localStorage.getItem("br_leaderboard") || "{}");
+
+    const battleMusic = document.getElementById("battleMusic");
+    const victorySound = document.getElementById("victorySound");
+
+    function capitalize(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    function getRandomClass() {
+      const keys = Object.keys(roles);
+      return keys[Math.floor(Math.random() * keys.length)];
+    }
+
+    function renderClassSelectors() {
+      const choices = document.getElementById("classChoices");
+      choices.innerHTML = "";
+      viewers.forEach(name => {
+        const select = document.createElement("select");
+        select.name = name;
+        Object.keys(roles).forEach(role => {
+          const opt = document.createElement("option");
+          opt.value = role;
+          opt.textContent = role;
+          if (assignments[name] === role) opt.selected = true;
+          select.appendChild(opt);
+        });
+        const label = document.createElement("label");
+        label.innerHTML = `<strong>${name}</strong>: `;
+        label.appendChild(select);
+        choices.appendChild(label);
+      });
+    }
+
+    function renderHealthStatus() {
+      const healthStatus = document.getElementById("healthStatus");
+      healthStatus.innerHTML = "";
+      viewers.forEach(name => {
+        const container = document.createElement("div");
+        const bar = document.createElement("div");
+        const fill = document.createElement("div");
+        bar.className = "health-bar";
+        fill.className = "health-fill";
+        fill.id = `hp-${name}`;
+        bar.appendChild(fill);
+        container.innerHTML = `<strong>${name}</strong>: <span id="text-${name}">${health[name]}</span> HP`;
+        container.appendChild(bar);
+        healthStatus.appendChild(container);
+      });
+    }
+
+    function updateHealthUI(name) {
+      const percent = Math.max(0, health[name]);
+      const fill = document.getElementById(`hp-${name}`);
+      const text = document.getElementById(`text-${name}`);
+      if (fill) fill.style.width = `${percent}%`;
+      if (text) text.textContent = percent;
+    }
+
+    function logBattleMessage(msg) {
+      const log = document.getElementById("battleLog");
+      const div = document.createElement("div");
+      div.innerHTML = msg;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function logPowerupMessage(msg) {
+      const log = document.getElementById("battleLog");
+      const div = document.createElement("div");
+      div.className = "glow-drop";
+      div.innerHTML = msg;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function spawnPowerup() {
+      const candidates = viewers.filter(name => health[name] > 0);
+      if (candidates.length === 0) return;
+      const lucky = candidates[Math.floor(Math.random() * candidates.length)];
+      const bonus = Math.floor(Math.random() * 15) + 10;
+      health[lucky] += bonus;
+      logPowerupMessage(`✨ <strong>${lucky}</strong> picked up a health power-up and gained <strong>${bonus}</strong> HP!`);
+      updateHealthUI(lucky);
+    }
+
+    function updateLeaderboard(name) {
+      leaderboard[name] = (leaderboard[name] || 0) + 1;
+      localStorage.setItem("br_leaderboard", JSON.stringify(leaderboard));
+      renderLeaderboard();
+    }
+
+    function renderLeaderboard() {
+      const list = document.getElementById("leaderboardList");
+      list.innerHTML = "";
+      Object.entries(leaderboard)
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([name, wins]) => {
+          const li = document.createElement("li");
+          li.textContent = `${name} - ${wins} win${wins > 1 ? "s" : ""}`;
+          list.appendChild(li);
+        });
+    }
+
+    function displayFinalWinner(winner) {
+      const div = document.getElementById("finalWinner");
+      battleMusic.pause();
+      battleMusic.currentTime = 0;
+      victorySound.play();
+      if (winner) {
+        div.innerHTML = `🏆 <strong>${winner}</strong> wins the battle!`;
+        div.style.display = 'block';
+        updateLeaderboard(winner);
+        if (chatClient) chatClient.send(`PRIVMSG #pete_skis_banter_brigade :🏆 ${winner} is the champion of the arena!`);
+      } else {
+        div.innerHTML = `💀 No one survived.`;
+        div.style.display = 'block';
+        if (chatClient) chatClient.send(`PRIVMSG #pete_skis_banter_brigade :💀 No one survived this round.`);
+      }
+    }
+
+    function beginCombat() {
+      const alive = () => viewers.filter(v => health[v] > 0);
+      let round = 0;
+      const interval = setInterval(() => {
+        const fighters = alive();
+        if (fighters.length <= 1) {
+          clearInterval(interval);
+          const winner = fighters[0];
+          logPowerupMessage(winner ? `🏆 <strong>${winner}</strong> wins the battle!` : "💀 No one survived.");
+          displayFinalWinner(winner);
+          return;
+        }
+        if (Math.random() < 0.3) spawnPowerup();
+
+        const attacker = fighters[Math.floor(Math.random() * fighters.length)];
+        let defender;
+        do {
+          defender = fighters[Math.floor(Math.random() * fighters.length)];
+        } while (defender === attacker);
+
+        const dmg = Math.floor(Math.random() * 20) + 5;
+        health[defender] = Math.max(0, health[defender] - dmg);
+        logBattleMessage(`💥 <strong>${attacker}</strong> hits <strong>${defender}</strong> for <strong>${dmg}</strong> damage!`);
+        updateHealthUI(defender);
+        round++;
+      }, 2000);
+    }
+
+    function startBattle(event) {
+      event.preventDefault();
+      document.getElementById("classSelection").style.display = 'none';
+      const selects = document.querySelectorAll("#classChoices select");
+      selects.forEach(select => {
+        const name = select.name;
+        const chosen = select.value;
+        assignments[name] = chosen;
+        health[name] = 100;
+      });
+      renderHealthStatus();
+      logBattleMessage("⚔️ Battle begins in 10 seconds...");
+      let countdown = 10;
+      const interval = setInterval(() => {
+        if (countdown > 0) {
+          logBattleMessage(`⏳ ${countdown}...`);
+          countdown--;
+        } else {
+          clearInterval(interval);
+          logBattleMessage("🔥 Combat has begun!");
+          battleMusic.play();
+          beginCombat();
+        }
+      }, 1000);
+    }
+
+    function resetGame() {
+      viewers = [];
+      assignments = {};
+      health = {};
+      document.getElementById("classChoices").innerHTML = "";
+      document.getElementById("healthStatus").innerHTML = "";
+      document.getElementById("battleLog").innerHTML = "";
+      document.getElementById("winner").innerHTML = "";
+      document.getElementById("finalWinner").style.display = "none";
+      document.getElementById("classSelection").style.display = 'block';
+    }
+
+    function connectToTwitchChat() {
+      const socket = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
+      chatClient = socket;
+      socket.onopen = () => {
+        socket.send("PASS oauth:fqgj9l9iiup2dky7ptznuzh7z4xo7a\r\n");
+        socket.send("NICK pete_skis_banter_brigade\r\n");
+        socket.send("JOIN #pete_skis_banter_brigade\r\n");
+      };
+      socket.onmessage = (event) => {
+        const lines = event.data.split('\r\n');
+        lines.forEach(line => {
+          if (line.includes("PING")) socket.send("PONG :tmi.twitch.tv\r\n");
+          const match = line.match(/^:(\w+)!.* PRIVMSG #\w+ :!join (\w+)/);
+          if (match) {
+            const username = match[1];
+            const classRaw = match[2].toLowerCase();
+            const picked = Object.keys(roles).map(r => r.toLowerCase()).includes(classRaw)
+              ? capitalize(classRaw) : getRandomClass();
+            if (!viewers.includes(username)) {
+              viewers.push(username);
+              assignments[username] = picked;
+              logPowerupMessage(`<strong>${username}</strong> joined as <strong>${picked}</strong> ${roles[picked]}`);
+              renderClassSelectors();
+            }
+          }
+        });
+      };
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      renderLeaderboard();
+      connectToTwitchChat();
+      document.getElementById("classForm").addEventListener("submit", startBattle);
+      document.getElementById("resetButton").addEventListener("click", resetGame);
+    });
+  </script>
+</body>
+</html>
